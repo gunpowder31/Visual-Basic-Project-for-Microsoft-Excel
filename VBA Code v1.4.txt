@@ -1,0 +1,116 @@
+Sub generatePaySlipsWithGridlinesAndSendEmails()
+
+    Dim wb As Workbook
+    Dim payrollSheet As Worksheet
+    Dim paySlipSheet As Worksheet
+    Dim lastRow As Long
+    Dim lastColumn As Long
+    Dim currentRow As Long
+    Dim currentColumn As Long
+    Dim outputFilePath As String
+    Dim paySlipRow As Long
+    Dim payrollHeaderValue As String
+    Dim matchColumn As Long
+    Dim strFolderPath As String
+    Dim srNo As String
+    Dim objOutlook As Object
+    Dim objEmail As Object
+    Dim strEmpEmail As String
+    Dim strSubject As String
+    Dim strBody As String
+
+    ' Initialize workbook and sheets
+    Set wb = ThisWorkbook
+    Set payrollSheet = wb.Sheets("Payroll")
+    Set paySlipSheet = wb.Sheets("PaySlip")
+    
+    ' Get the folder path dynamically
+    strFolderPath = wb.Path & "\GeneratedPaySlips\"
+    If Dir(strFolderPath, vbDirectory) = "" Then
+        MkDir strFolderPath
+    End If
+    
+    ' Enable gridlines for the PaySlip sheet
+    With paySlipSheet.PageSetup
+        .PrintGridlines = True
+    End With
+
+    ' Get the last row and last column in the Payroll sheet
+    lastRow = payrollSheet.Cells(payrollSheet.Rows.Count, "A").End(xlUp).Row
+    lastColumn = payrollSheet.Cells(1, payrollSheet.Columns.Count).End(xlToLeft).Column
+
+    ' Create Outlook application object
+    Set objOutlook = CreateObject("Outlook.Application")
+    
+    ' Loop through each employee row in the Payroll sheet (Row 2 onwards)
+    For currentRow = 2 To lastRow
+        
+        ' Get Sr.No. from Column A in Payroll sheet (Row 2 and onwards)
+        srNo = payrollSheet.Cells(currentRow, 1).Value
+        
+        ' Get the employee email from Column CV (Column 98)
+        strEmpEmail = payrollSheet.Cells(currentRow, 98).Value
+        
+        ' Clear previous data from PaySlip (Row 3 to 55)
+        paySlipSheet.Range("B3:B55").ClearContents
+        paySlipSheet.Range("C3:C55").ClearContents
+        paySlipSheet.Range("E3:E55").ClearContents
+        paySlipSheet.Range("F3:F55").ClearContents
+
+        ' Loop through PaySlip rows (Row 3 to 55)
+        For paySlipRow = 3 To 55
+            ' Get the value in Column A of the PaySlip sheet for the current row
+            payrollHeaderValue = paySlipSheet.Cells(paySlipRow, 1).Value
+            
+            ' Find the matching column in the Payroll sheet (Row 1, starting from Column D)
+            matchColumn = 0
+            For currentColumn = 4 To lastColumn ' Start from Column D
+                If payrollSheet.Cells(1, currentColumn).Value = payrollHeaderValue Then
+                    matchColumn = currentColumn
+                    Exit For
+                End If
+            Next currentColumn
+            
+            ' If a match is found, update the PaySlip sheet
+            If matchColumn > 0 Then
+                paySlipSheet.Cells(paySlipRow, 3).Value = payrollSheet.Cells(currentRow, matchColumn).Value
+            Else
+                paySlipSheet.Cells(paySlipRow, 3).Value = "" ' Clear the cell if no match is found
+            End If
+        Next paySlipRow
+        
+        ' Generate the PaySlip PDF with gridlines and name it using Sr.No.
+        outputFilePath = strFolderPath & "Payroll_Sr_No_" & srNo & ".pdf"
+        paySlipSheet.ExportAsFixedFormat xlTypePDF, outputFilePath
+        
+        ' Create email and send via Outlook if email exists
+        If strEmpEmail <> "" Then
+            Set objEmail = objOutlook.CreateItem(0) ' Create a new email item
+            strSubject = "Pay Slip for Sr.No. " & srNo
+            strBody = "Dear Employee," & vbCrLf & vbCrLf & _
+                      "Please find your pay slip for the month attached." & vbCrLf & _
+                      "Kindly contact HR if you have any queries." & vbCrLf & vbCrLf & _
+                      "Regards," & vbCrLf & _
+                      "Your Company Name"
+            
+            ' Set email properties
+            With objEmail
+                .To = strEmpEmail
+                .Subject = strSubject
+                .Body = strBody
+                .Attachments.Add outputFilePath ' Attach the generated PDF
+                .Send ' Send the email
+            End With
+        End If
+    Next currentRow
+    paySlipSheet.Range("B3:B55").ClearContents
+    paySlipSheet.Range("C3:C55").ClearContents
+    paySlipSheet.Range("E3:E55").ClearContents
+    paySlipSheet.Range("F3:F55").ClearContents
+
+    MsgBox "PaySlips with gridlines generated and emails sent successfully in the folder: " & strFolderPath, vbInformation
+ErrorHandler:
+    MsgBox "An error occurred: " & Err.Description, vbCritical
+End Sub
+
+
